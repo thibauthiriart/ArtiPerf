@@ -95,12 +95,20 @@
 
   // État stocké en mémoire pour gérer la resélection
   let currentAmbigu = null;
+  let currentNomEntendu = "";
 
   const renderConfirmed = (client) => {
-    // 1. Met à jour le bloc "Devis extrait" avec l'adresse et le tél du client
-    devisAddressValue.textContent = `${client.adresse}, ${client.code_postal} ${client.ville}`;
+    // 1. Met à jour le bloc "Devis extrait" : nom corrigé + adresse + tél
+    const nomComplet = [client.civilite, client.prenom, client.nom]
+      .filter(Boolean)
+      .join(" ");
+    devisClient.replaceChildren(formatValue(nomComplet));
+    devisAddressValue.textContent = [
+      client.adresse,
+      [client.code_postal, client.ville].filter(Boolean).join(" "),
+    ].filter(Boolean).join(", ");
     devisAddressField.classList.remove("hidden");
-    devisPhoneValue.textContent = client.telephone;
+    devisPhoneValue.textContent = client.telephone || "";
     devisPhoneField.classList.remove("hidden");
 
     // 2. Remplace la fiche client par l'état "identifié"
@@ -114,17 +122,17 @@
     if (currentAmbigu && currentAmbigu.length > 1) {
       const btn = text("button", "link-btn", "↺ Choisir un autre client");
       btn.type = "button";
-      btn.addEventListener("click", () => renderCandidates(currentAmbigu));
+      btn.addEventListener("click", () => renderCandidates(currentAmbigu, currentNomEntendu));
       clientDbContent.append(btn);
     }
   };
 
-  const renderCandidates = (candidats) => {
+  const renderCandidates = (candidats, nomEntendu) => {
     clearClientFields();
     clientDbContent.replaceChildren();
     clientDbContent.append(
       text("div", "client-status warn",
-        `${candidats.length} clients correspondent — cliquez sur le bon`),
+        `${candidats.length} client(s) correspondent — cliquez sur le bon`),
     );
 
     for (const c of candidats) {
@@ -142,19 +150,164 @@
       });
       clientDbContent.appendChild(card);
     }
+
+    const notInDb = text("button", "link-btn", "Ce client n'est pas dans la base");
+    notInDb.type = "button";
+    notInDb.addEventListener("click", () => {
+      clientDbContent.replaceChildren();
+      renderNewClientForm(nomEntendu);
+    });
+    clientDbContent.appendChild(notInDb);
   };
 
-  const renderClientDb = (clientDb) => {
+  const capitalize = (s) =>
+    s ? s.charAt(0).toUpperCase() + s.slice(1) : "";
+
+  const CIVILITE_MAP = {
+    "monsieur": "Monsieur", "mr": "Monsieur", "m": "Monsieur",
+    "madame": "Madame", "mme": "Madame",
+    "mademoiselle": "Madame", "mlle": "Madame",
+  };
+
+  const parseHeardName = (heard) => {
+    if (!heard) return { civilite: "", prenom: "", nom: "" };
+    const tokens = heard.trim().split(/\s+/).filter(Boolean);
+    const norm = (w) => w.toLowerCase().replace(/\.$/, "");
+
+    let civilite = "";
+    let i = 0;
+    if (tokens.length && CIVILITE_MAP[norm(tokens[0])]) {
+      civilite = CIVILITE_MAP[norm(tokens[0])];
+      i = 1;
+    }
+    const rest = tokens.slice(i);
+    if (rest.length === 0) return { civilite, prenom: "", nom: "" };
+    if (rest.length === 1) return { civilite, prenom: "", nom: capitalize(rest[0]) };
+    return {
+      civilite,
+      prenom: rest.slice(0, -1).map(capitalize).join(" "),
+      nom: capitalize(rest[rest.length - 1]),
+    };
+  };
+
+  const renderNewClientForm = (nomEntendu) => {
+    clientDbContent.append(
+      text("div", "client-status warn",
+        "Nouveau client — veuillez renseigner ses informations personnelles"),
+    );
+
+    const parsed = parseHeardName(nomEntendu);
+
+    const form = document.createElement("form");
+    form.className = "new-client-form";
+
+    const row = (label, name, opts = {}) => {
+      const wrap = document.createElement("label");
+      wrap.className = "form-row";
+      wrap.append(text("span", "form-label", label));
+      const input = document.createElement(opts.select ? "select" : "input");
+      input.name = name;
+      input.className = "form-input";
+      if (opts.select) {
+        for (const v of opts.options) {
+          const o = document.createElement("option");
+          o.value = v;
+          o.textContent = v || "—";
+          if (opts.value && v === opts.value) o.selected = true;
+          input.appendChild(o);
+        }
+      } else {
+        input.type = opts.type || "text";
+      }
+      if (opts.value && !opts.select) input.value = opts.value;
+      if (opts.required) input.required = true;
+      wrap.appendChild(input);
+      return wrap;
+    };
+
+    form.append(
+      row("Civilité", "civilite", {
+        select: true,
+        options: ["", "Madame", "Monsieur"],
+        value: parsed.civilite,
+      }),
+      row("Prénom", "prenom", { value: parsed.prenom }),
+      row("Nom", "nom", { value: parsed.nom, required: true }),
+      row("Adresse", "adresse"),
+      row("Code postal", "code_postal"),
+      row("Ville", "ville"),
+      row("Téléphone", "telephone", { type: "tel" }),
+      row("Email", "email", { type: "email" }),
+    );
+
+    const submit = document.createElement("button");
+    submit.type = "submit";
+    submit.className = "form-submit";
+    submit.textContent = "Enregistrer ce client";
+    form.appendChild(submit);
+
+    const errorBox = text("div", "form-error hidden", "");
+    form.appendChild(errorBox);
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      errorBox.classList.add("hidden");
+
+      const fd = new FormData(form);
+      const payload = {
+        civilite: (fd.get("civilite") || "").trim(),
+        prenom: (fd.get("prenom") || "").trim(),
+        nom: (fd.get("nom") || "").trim(),
+        adresse: (fd.get("adresse") || "").trim(),
+        code_postal: (fd.get("code_postal") || "").trim(),
+        ville: (fd.get("ville") || "").trim(),
+        telephone: (fd.get("telephone") || "").trim(),
+        email: (fd.get("email") || "").trim(),
+      };
+
+      submit.disabled = true;
+      submit.textContent = "Enregistrement…";
+      try {
+        const resp = await fetch("/clients", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await resp.json();
+        if (!resp.ok) {
+          errorBox.textContent = data.detail || `Erreur ${resp.status}`;
+          errorBox.classList.remove("hidden");
+          return;
+        }
+        renderConfirmed(data);
+      } catch (err) {
+        errorBox.textContent = "Erreur réseau : " + err.message;
+        errorBox.classList.remove("hidden");
+      } finally {
+        submit.disabled = false;
+        submit.textContent = "Enregistrer ce client";
+      }
+    });
+
+    clientDbContent.appendChild(form);
+  };
+
+  const renderClientDb = (clientDb, nomEntendu) => {
     clearClientFields();
     clientDbContent.replaceChildren();
     currentAmbigu = null;
+    currentNomEntendu = nomEntendu || "";
 
     if (!clientDb || clientDb.status === "inconnu") {
-      const nom = clientDb?.nom_cherche;
-      const msg = nom
-        ? `Aucun client trouvé pour « ${nom} » dans la base.`
-        : "Aucun client n'a été détecté dans la dictée.";
-      clientDbContent.append(text("div", "client-unknown", msg));
+      const base = nomEntendu || clientDb?.nom_cherche || "";
+      if (!base) {
+        clientDbContent.append(
+          text("div", "client-unknown",
+            "Aucun client n'a été détecté dans la dictée."),
+        );
+        return;
+      }
+      renderNewClientForm(base);
       return;
     }
 
@@ -165,7 +318,7 @@
 
     if (clientDb.status === "ambigu") {
       currentAmbigu = clientDb.candidats;
-      renderCandidates(clientDb.candidats);
+      renderCandidates(clientDb.candidats, nomEntendu);
     }
   };
 
@@ -278,7 +431,7 @@
         renderDevis(resultat.devis);
         devisPanel.classList.remove("hidden");
 
-        renderClientDb(resultat.devis.client_db);
+        renderClientDb(resultat.devis.client_db, resultat.devis.client);
         clientDbPanel.classList.remove("hidden");
       } else {
         messageText.textContent = resultat.message || "Aucun devis détecté.";

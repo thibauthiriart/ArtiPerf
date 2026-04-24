@@ -63,7 +63,11 @@ Extrais les informations essentielles et renvoie-les en JSON.
 Règles d'extraction :
 - "client" : le nom du client tel que dicté, proprement capitalisé
   (ex : "madame martin" → "Madame Martin", "monsieur dupont" → "Monsieur Dupont").
-  Si absent, mets null.
+  Si absent, mets null. Si l'utilisateur dit "nouveau client Jean Dupont",
+  extrais "Jean Dupont" (sans le mot "nouveau client").
+- "nouveau_client" : true si la dictée signale explicitement qu'il s'agit d'un
+  nouveau client à créer (expressions : "nouveau client", "c'est un nouveau
+  client", "client inconnu", "pas encore dans la base", "à créer"). false sinon.
 - "domaine" : le type de travaux évoqué (carrelage, plomberie, peinture,
   menuiserie, électricité, maçonnerie, etc.), en minuscules. Si absent, mets null.
 - "fournitures" : liste des articles/matériaux dictés. Pour chacun :

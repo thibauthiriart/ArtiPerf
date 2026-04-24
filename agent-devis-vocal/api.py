@@ -22,6 +22,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from clients import creer_client
 from config import API_HOST, API_PORT
 from main import agent
 from transcribe import transcrire_bytes
@@ -53,6 +54,17 @@ class DicterDevisResponse(BaseModel):
     resultat: dict[str, Any]  # {type, devis, message}
 
 
+class ClientCreate(BaseModel):
+    civilite: str = ""
+    prenom: str = ""
+    nom: str
+    adresse: str = ""
+    code_postal: str = ""
+    ville: str = ""
+    telephone: str = ""
+    email: str = ""
+
+
 class Health(BaseModel):
     status: str
     version: str
@@ -78,6 +90,19 @@ def index():
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.post("/clients", status_code=201)
+def creer_client_endpoint(payload: ClientCreate):
+    """Crée un nouveau client dans clients.db et renvoie la fiche complète."""
+    try:
+        client = creer_client(payload.model_dump())
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
+    except Exception as e:
+        logger.error(f"Erreur création client : {type(e).__name__} — {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+    return client
 
 
 @app.post("/transcribe", response_model=TranscriptionResponse)

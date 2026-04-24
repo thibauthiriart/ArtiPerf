@@ -29,6 +29,7 @@ logger = logging.getLogger("agent")
 # === Schéma JSON attendu pour un devis ===
 SCHEMA_DEVIS = (
     '{"client": "Nom du client ou null", '
+    '"nouveau_client": "true ou false", '
     '"domaine": "type de travaux ou null", '
     '"fournitures": ['
     '{"description": "produit", "marque": "marque ou null", "quantite": "nombre ou null"}'
@@ -47,6 +48,7 @@ def extraire_devis(texte):
     # On force la forme attendue même si le LLM renvoie autre chose
     return {
         "client": donnees.get("client"),
+        "nouveau_client": bool(donnees.get("nouveau_client")),
         "domaine": donnees.get("domaine"),
         "fournitures": donnees.get("fournitures", []) or [],
     }
@@ -109,7 +111,16 @@ Choisis l'outil le plus adapté.""",
 
         # Enrichissement : recherche du client en base
         nom_dicte = devis.get("client")
-        if nom_dicte:
+        if devis.get("nouveau_client"):
+            # L'utilisateur a explicitement signalé un nouveau client :
+            # on saute la recherche BDD pour afficher directement le formulaire.
+            devis["client_db"] = {
+                "status": "inconnu",
+                "nom_cherche": nom_dicte,
+                "client": None,
+                "candidats": [],
+            }
+        elif nom_dicte:
             devis["client_db"] = rechercher_client(nom_dicte)
         else:
             devis["client_db"] = {
