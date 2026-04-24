@@ -81,3 +81,43 @@ Règles d'extraction :
 - Si la dictée ne ressemble pas à un devis, renvoie tous les champs à null
   et "fournitures": [].
 """
+
+
+# ================================================================
+# Prompts d'extraction par champ (formulaire assisté)
+# ================================================================
+
+CLIENT_FIELD_PROMPT = """La dictée ne concerne QUE l'identité d'un client
+d'artisan. Extrais le nom (et civilité/prénom si présents), proprement
+capitalisé (ex : "madame martin" → "Madame Martin").
+
+Règles :
+- "client" : la chaîne complète telle que dictée, capitalisée. null si absent.
+- "nouveau_client" : true si la dictée signale explicitement un nouveau client
+  ("nouveau client", "client inconnu", "à créer", "pas dans la base"). false sinon.
+- Ignore tout ce qui n'est pas une identité (travaux, matériaux…).
+"""
+
+CATEGORIE_FIELD_PROMPT = """La dictée ne concerne QUE le domaine de travaux
+d'un devis d'artisan.
+
+Règles :
+- "categorie" : le type de travaux en minuscules, un seul mot quand possible
+  (carrelage, plomberie, peinture, menuiserie, électricité, maçonnerie,
+  isolation, toiture, chauffage, etc.). null si absent.
+- Normalise les variantes (ex : "faire du carrelage" → "carrelage",
+  "travaux de peinture" → "peinture").
+"""
+
+FOURNITURE_FIELD_PROMPT = """La dictée décrit UNE SEULE fourniture à ajouter
+au devis. Extrais-la.
+
+Règles :
+- "description" : nom du produit en minuscules (ex : "carreaux", "robinet mitigeur").
+- "marque" : marque citée, casse d'origine. null si absente. Whisper peut mal
+  transcrire les marques ("de la fond" → "Delafon", "grosse foie" → "Grohe") :
+  reconnais les marques BTP plausibles.
+- "quantite" : entier si chiffré, null si vague ("quelques", "plusieurs") ou absent.
+- Si plusieurs fournitures semblent dictées, ne garde que la première /
+  la principale (ce champ n'en attend qu'une).
+"""

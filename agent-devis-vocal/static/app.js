@@ -1,84 +1,208 @@
-// Devis Vocal : enregistrement micro → POST /dicter-devis → affichage structuré.
+// Devis Vocal — formulaire : chaque champ a son micro, appel à /dicter-champ.
 (() => {
-  const btn = document.getElementById("btn");
-  const timer = document.getElementById("timer");
-  const status = document.getElementById("status");
-
-  const transcriptPanel = document.getElementById("transcript");
-  const transcriptText = document.getElementById("transcript-text");
-
-  const devisPanel = document.getElementById("devis");
-  const devisClient = document.getElementById("devis-client");
-  const devisDomaine = document.getElementById("devis-domaine");
-  const devisFournitures = document.getElementById("devis-fournitures");
-
-  const clientDbPanel = document.getElementById("client-db");
+  // ---------- éléments globaux ----------
+  const form = document.getElementById("devis-form");
+  const champClient = document.getElementById("champ-client");
+  const champCategorie = document.getElementById("champ-categorie");
   const clientDbContent = document.getElementById("client-db-content");
-
-  const devisAddressField = document.getElementById("devis-address-field");
-  const devisAddressValue = document.getElementById("devis-address");
-  const devisPhoneField = document.getElementById("devis-phone-field");
-  const devisPhoneValue = document.getElementById("devis-phone");
-
-  const messagePanel = document.getElementById("message");
-  const messageText = document.getElementById("message-text");
-
+  const fournituresList = document.getElementById("fournitures-list");
+  const btnAddFourniture = document.getElementById("btn-add-fourniture");
   const debugBlock = document.getElementById("debug");
   const debugJson = document.getElementById("debug-json");
 
-  let mediaRecorder = null;
-  let chunks = [];
-  let stream = null;
-  let tickInterval = null;
-  let startTs = 0;
+  // ---------- état client (pour gérer ambigu/nouveau) ----------
+  let clientState = {
+    // "libre" = saisie clavier uniquement, pas de fiche DB
+    // "trouve" = fiche validée, client est l'objet DB
+    // "ambigu" = en attente de choix
+    // "nouveau" = formulaire de création affiché
+    mode: "libre",
+    client: null,       // fiche DB sélectionnée
+    candidats: [],      // si ambigu
+    nomEntendu: "",     // dernier nom dicté (utile pour création)
+  };
 
-  // ---------- états du bouton ----------
-  const setState = (state) => {
+  // ================================================================
+  // Helpers DOM
+  // ================================================================
+
+  const text = (tag, cls, str) => {
+    const el = document.createElement(tag);
+    if (cls) el.className = cls;
+    if (str !== undefined) el.textContent = str;
+    return el;
+  };
+
+  const setMicState = (btn, state) => {
     btn.classList.remove("idle", "recording", "processing");
     btn.classList.add(state);
     btn.disabled = state === "processing";
   };
 
-  const setStatus = (msg, kind = "") => {
-    status.className = "status" + (kind ? " " + kind : "");
-    status.textContent = msg;
+  const setMicStatus = (champ, msg, kind = "") => {
+    const el = document.querySelector(`.mic-status[data-status="${champ}"]`);
+    if (!el) return;
+    el.className = "mic-status" + (kind ? " " + kind : "");
+    el.textContent = msg || "";
   };
 
-  const hidePanels = () => {
-    [transcriptPanel, devisPanel, clientDbPanel, messagePanel, debugBlock].forEach((p) =>
-      p.classList.add("hidden"),
-    );
-    devisAddressField.classList.add("hidden");
-    devisPhoneField.classList.add("hidden");
-  };
+  // ================================================================
+  // Enregistrement micro (factorisé par champ)
+  // ================================================================
 
-  // ---------- rendu du devis ----------
-  const formatValue = (v) => {
-    if (v === null || v === undefined || v === "") {
-      const span = document.createElement("span");
-      span.className = "missing";
-      span.textContent = "non précisé";
-      return span;
+  const recorders = {}; // { champ: {mediaRecorder, chunks, stream} }
+
+  const startRecording = async (btn, champ) => {
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setMicStatus(champ, "Navigateur sans support micro.", "err");
+      return;
     }
-    return document.createTextNode(String(v));
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (err) {
+      setMicStatus(champ, "Accès micro refusé : " + err.message, "err");
+      return;
+    }
+
+    const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+      ? "audio/webm;codecs=opus"
+      : "audio/webm";
+    const mediaRecorder = new MediaRecorder(stream, { mimeType: mime });
+    const chunks = [];
+
+    mediaRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) chunks.push(e.data);
+    };
+    mediaRecorder.onstop = () => handleStop(btn, champ, chunks, stream);
+    mediaRecorder.start();
+
+    recorders[champ] = { mediaRecorder, stream };
+    setMicState(btn, "recording");
+    setMicStatus(champ, "Enregistrement…");
   };
 
-  // ---------- rendu de la fiche client DB ----------
-  const text = (tag, cls, str) => {
-    const el = document.createElement(tag);
-    if (cls) el.className = cls;
-    el.textContent = str;
-    return el;
+  const stopRecording = (btn, champ) => {
+    const r = recorders[champ];
+    if (!r) return;
+    r.mediaRecorder.stop();
+    r.stream.getTracks().forEach((t) => t.stop());
+    delete recorders[champ];
+    setMicState(btn, "processing");
+    setMicStatus(champ, "Transcription et analyse…");
   };
+
+  const handleStop = async (btn, champ, chunks, _stream) => {
+    const blob = new Blob(chunks, { type: "audio/webm" });
+    try {
+      const fd = new FormData();
+      fd.append("champ", champ);
+      fd.append("audio", blob, "dictee.webm");
+
+      const resp = await fetch("/dicter-champ", { method: "POST", body: fd });
+      const data = await resp.json();
+
+      if (!resp.ok) {
+        setMicStatus(champ, "Erreur : " + (data.detail || resp.statusText), "err");
+        setMicState(btn, "idle");
+        return;
+      }
+
+      applyExtraction(champ, data);
+      setMicStatus(champ, `Transcrit en ${data.duree_transcription_s}s`, "ok");
+    } catch (err) {
+      setMicStatus(champ, "Erreur réseau : " + err.message, "err");
+    } finally {
+      setMicState(btn, "idle");
+    }
+  };
+
+  // ================================================================
+  // Appliquer le résultat d'extraction au formulaire
+  // ================================================================
+
+  const applyExtraction = (champ, data) => {
+    const d = data.donnees || {};
+    if (champ === "client") {
+      champClient.value = d.client || "";
+      renderClientDb(d.client_db, d.client || "");
+    } else if (champ === "categorie") {
+      champCategorie.value = d.categorie || "";
+    } else if (champ === "fourniture") {
+      addFournitureRow({
+        description: d.description || "",
+        marque: d.marque || "",
+        quantite: d.quantite ?? "",
+      });
+      removeEmptyPlaceholder();
+    }
+  };
+
+  // ================================================================
+  // Fournitures : liste éditable
+  // ================================================================
+
+  const removeEmptyPlaceholder = () => {
+    const empty = fournituresList.querySelector(".fournitures-empty");
+    if (empty) empty.remove();
+  };
+
+  const showEmptyPlaceholderIfNeeded = () => {
+    if (!fournituresList.querySelector(".fourniture-row")) {
+      fournituresList.replaceChildren(
+        text("p", "fournitures-empty",
+          "Aucune fourniture — dictez-en une ou cliquez sur +"),
+      );
+    }
+  };
+
+  const addFournitureRow = (f = { description: "", marque: "", quantite: "" }) => {
+    removeEmptyPlaceholder();
+
+    const row = text("div", "fourniture-row");
+
+    const mkInput = (name, value, placeholder, extraCls = "") => {
+      const input = document.createElement("input");
+      input.type = name === "quantite" ? "number" : "text";
+      input.className = "form-input fourniture-input " + extraCls;
+      input.name = name;
+      input.value = value ?? "";
+      input.placeholder = placeholder;
+      if (name === "quantite") input.min = "0";
+      return input;
+    };
+
+    const descInput = mkInput("description", f.description, "Description", "f-desc");
+    const marqueInput = mkInput("marque", f.marque, "Marque", "f-marque");
+    const qteInput = mkInput("quantite", f.quantite, "Qté", "f-qte");
+
+    const rmBtn = text("button", "btn-remove", "×");
+    rmBtn.type = "button";
+    rmBtn.setAttribute("aria-label", "Supprimer cette fourniture");
+    rmBtn.addEventListener("click", () => {
+      row.remove();
+      showEmptyPlaceholderIfNeeded();
+    });
+
+    row.append(descInput, marqueInput, qteInput, rmBtn);
+    fournituresList.appendChild(row);
+    // focus sur la description pour édition rapide si ligne vide
+    if (!f.description) descInput.focus();
+  };
+
+  btnAddFourniture.addEventListener("click", () => addFournitureRow());
+
+  // ================================================================
+  // Rendu de la fiche client DB
+  // ================================================================
 
   const ficheClientHTML = (c) => {
-    const card = document.createElement("div");
-    card.className = "client-card";
+    const card = text("div", "client-card");
     card.append(
-      text("div", "client-name", `${c.civilite} ${c.prenom} ${c.nom}`),
-      text("div", "client-line", c.adresse),
-      text("div", "client-line", `${c.code_postal} ${c.ville}`),
-      text("div", "client-line client-contact", `📞 ${c.telephone}`),
+      text("div", "client-name", `${c.civilite || ""} ${c.prenom || ""} ${c.nom || ""}`.trim()),
+      text("div", "client-line", c.adresse || ""),
+      text("div", "client-line", [c.code_postal, c.ville].filter(Boolean).join(" ")),
+      text("div", "client-line client-contact", `📞 ${c.telephone || ""}`),
     );
     if (c.email) {
       card.append(text("div", "client-line client-contact", `✉️ ${c.email}`));
@@ -86,78 +210,16 @@
     return card;
   };
 
-  const clearClientFields = () => {
-    devisAddressField.classList.add("hidden");
-    devisAddressValue.textContent = "";
-    devisPhoneField.classList.add("hidden");
-    devisPhoneValue.textContent = "";
-  };
-
-  // État stocké en mémoire pour gérer la resélection
-  let currentAmbigu = null;
-  let currentNomEntendu = "";
-
   const renderConfirmed = (client) => {
-    // 1. Met à jour le bloc "Devis extrait" : nom corrigé + adresse + tél
+    clientState = { mode: "trouve", client, candidats: [], nomEntendu: "" };
     const nomComplet = [client.civilite, client.prenom, client.nom]
-      .filter(Boolean)
-      .join(" ");
-    devisClient.replaceChildren(formatValue(nomComplet));
-    devisAddressValue.textContent = [
-      client.adresse,
-      [client.code_postal, client.ville].filter(Boolean).join(" "),
-    ].filter(Boolean).join(", ");
-    devisAddressField.classList.remove("hidden");
-    devisPhoneValue.textContent = client.telephone || "";
-    devisPhoneField.classList.remove("hidden");
+      .filter(Boolean).join(" ");
+    champClient.value = nomComplet;
 
-    // 2. Remplace la fiche client par l'état "identifié"
-    clientDbContent.replaceChildren();
-    clientDbContent.append(
+    clientDbContent.replaceChildren(
       text("div", "client-status ok", "Client identifié"),
       ficheClientHTML(client),
     );
-
-    // 3. Si c'était ambigu, propose de revenir au choix
-    if (currentAmbigu && currentAmbigu.length > 1) {
-      const btn = text("button", "link-btn", "↺ Choisir un autre client");
-      btn.type = "button";
-      btn.addEventListener("click", () => renderCandidates(currentAmbigu, currentNomEntendu));
-      clientDbContent.append(btn);
-    }
-  };
-
-  const renderCandidates = (candidats, nomEntendu) => {
-    clearClientFields();
-    clientDbContent.replaceChildren();
-    clientDbContent.append(
-      text("div", "client-status warn",
-        `${candidats.length} client(s) correspondent — cliquez sur le bon`),
-    );
-
-    for (const c of candidats) {
-      const card = ficheClientHTML(c);
-      card.classList.add("client-card-choice");
-      card.setAttribute("role", "button");
-      card.setAttribute("tabindex", "0");
-      const choose = () => renderConfirmed(c);
-      card.addEventListener("click", choose);
-      card.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          choose();
-        }
-      });
-      clientDbContent.appendChild(card);
-    }
-
-    const notInDb = text("button", "link-btn", "Ce client n'est pas dans la base");
-    notInDb.type = "button";
-    notInDb.addEventListener("click", () => {
-      clientDbContent.replaceChildren();
-      renderNewClientForm(nomEntendu);
-    });
-    clientDbContent.appendChild(notInDb);
   };
 
   const capitalize = (s) =>
@@ -173,7 +235,6 @@
     if (!heard) return { civilite: "", prenom: "", nom: "" };
     const tokens = heard.trim().split(/\s+/).filter(Boolean);
     const norm = (w) => w.toLowerCase().replace(/\.$/, "");
-
     let civilite = "";
     let i = 0;
     if (tokens.length && CIVILITE_MAP[norm(tokens[0])]) {
@@ -191,15 +252,16 @@
   };
 
   const renderNewClientForm = (nomEntendu) => {
+    clientState = { mode: "nouveau", client: null, candidats: [], nomEntendu };
+    clientDbContent.replaceChildren();
     clientDbContent.append(
       text("div", "client-status warn",
-        "Nouveau client — veuillez renseigner ses informations personnelles"),
+        "Nouveau client — veuillez renseigner ses informations"),
     );
 
     const parsed = parseHeardName(nomEntendu);
-
-    const form = document.createElement("form");
-    form.className = "new-client-form";
+    const subForm = document.createElement("form");
+    subForm.className = "new-client-form";
 
     const row = (label, name, opts = {}) => {
       const wrap = document.createElement("label");
@@ -225,11 +287,9 @@
       return wrap;
     };
 
-    form.append(
+    subForm.append(
       row("Civilité", "civilite", {
-        select: true,
-        options: ["", "Madame", "Monsieur"],
-        value: parsed.civilite,
+        select: true, options: ["", "Madame", "Monsieur"], value: parsed.civilite,
       }),
       row("Prénom", "prenom", { value: parsed.prenom }),
       row("Nom", "nom", { value: parsed.nom, required: true }),
@@ -240,20 +300,16 @@
       row("Email", "email", { type: "email" }),
     );
 
-    const submit = document.createElement("button");
+    const submit = text("button", "form-submit", "Enregistrer ce client");
     submit.type = "submit";
-    submit.className = "form-submit";
-    submit.textContent = "Enregistrer ce client";
-    form.appendChild(submit);
-
+    subForm.appendChild(submit);
     const errorBox = text("div", "form-error hidden", "");
-    form.appendChild(errorBox);
+    subForm.appendChild(errorBox);
 
-    form.addEventListener("submit", async (e) => {
+    subForm.addEventListener("submit", async (e) => {
       e.preventDefault();
       errorBox.classList.add("hidden");
-
-      const fd = new FormData(form);
+      const fd = new FormData(subForm);
       const payload = {
         civilite: (fd.get("civilite") || "").trim(),
         prenom: (fd.get("prenom") || "").trim(),
@@ -264,7 +320,6 @@
         telephone: (fd.get("telephone") || "").trim(),
         email: (fd.get("email") || "").trim(),
       };
-
       submit.disabled = true;
       submit.textContent = "Enregistrement…";
       try {
@@ -289,172 +344,104 @@
       }
     });
 
-    clientDbContent.appendChild(form);
+    clientDbContent.appendChild(subForm);
+  };
+
+  const renderCandidates = (candidats, nomEntendu) => {
+    clientState = { mode: "ambigu", client: null, candidats, nomEntendu };
+    clientDbContent.replaceChildren(
+      text("div", "client-status warn",
+        `${candidats.length} client(s) correspondent — cliquez sur le bon`),
+    );
+    for (const c of candidats) {
+      const card = ficheClientHTML(c);
+      card.classList.add("client-card-choice");
+      card.setAttribute("role", "button");
+      card.setAttribute("tabindex", "0");
+      const choose = () => renderConfirmed(c);
+      card.addEventListener("click", choose);
+      card.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); choose(); }
+      });
+      clientDbContent.appendChild(card);
+    }
+    const notInDb = text("button", "link-btn", "Ce client n'est pas dans la base");
+    notInDb.type = "button";
+    notInDb.addEventListener("click", () => renderNewClientForm(nomEntendu));
+    clientDbContent.appendChild(notInDb);
   };
 
   const renderClientDb = (clientDb, nomEntendu) => {
-    clearClientFields();
     clientDbContent.replaceChildren();
-    currentAmbigu = null;
-    currentNomEntendu = nomEntendu || "";
 
     if (!clientDb || clientDb.status === "inconnu") {
       const base = nomEntendu || clientDb?.nom_cherche || "";
       if (!base) {
-        clientDbContent.append(
-          text("div", "client-unknown",
-            "Aucun client n'a été détecté dans la dictée."),
-        );
+        clientState = { mode: "libre", client: null, candidats: [], nomEntendu: "" };
         return;
       }
       renderNewClientForm(base);
       return;
     }
-
     if (clientDb.status === "trouve") {
       renderConfirmed(clientDb.client);
       return;
     }
-
     if (clientDb.status === "ambigu") {
-      currentAmbigu = clientDb.candidats;
       renderCandidates(clientDb.candidats, nomEntendu);
     }
   };
 
-  const renderDevis = (devis) => {
-    devisClient.replaceChildren(formatValue(devis.client));
-    devisDomaine.replaceChildren(formatValue(devis.domaine));
-
-    devisFournitures.replaceChildren();
-    const fournitures = devis.fournitures || [];
-
-    if (fournitures.length === 0) {
-      const empty = document.createElement("p");
-      empty.className = "missing";
-      empty.textContent = "Aucune fourniture détectée";
-      devisFournitures.appendChild(empty);
-      return;
+  // Si l'utilisateur réédite le champ client au clavier, on efface la fiche :
+  // le nom saisi ne correspond plus à la fiche confirmée.
+  champClient.addEventListener("input", () => {
+    if (clientState.mode === "trouve" || clientState.mode === "ambigu") {
+      clientDbContent.replaceChildren();
+      clientState = { mode: "libre", client: null, candidats: [], nomEntendu: "" };
     }
-
-    for (const f of fournitures) {
-      const card = document.createElement("div");
-      card.className = "fourniture-card";
-
-      const desc = document.createElement("div");
-      desc.className = "fourniture-desc";
-      desc.textContent = f.description || "—";
-
-      const marque = document.createElement("div");
-      marque.className = "fourniture-line";
-      marque.append("Marque : ", formatValue(f.marque));
-
-      const qte = document.createElement("div");
-      qte.className = "fourniture-line";
-      qte.append("Quantité : ", formatValue(f.quantite));
-
-      card.append(desc, marque, qte);
-      devisFournitures.appendChild(card);
-    }
-  };
-
-  // ---------- enregistrement ----------
-  const startRecording = async () => {
-    if (!navigator.mediaDevices?.getUserMedia) {
-      setStatus("Le navigateur ne supporte pas l'enregistrement audio.", "err");
-      return;
-    }
-    try {
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    } catch (err) {
-      setStatus("Accès micro refusé : " + err.message, "err");
-      return;
-    }
-
-    hidePanels();
-    chunks = [];
-
-    const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-      ? "audio/webm;codecs=opus"
-      : "audio/webm";
-    mediaRecorder = new MediaRecorder(stream, { mimeType: mime });
-
-    mediaRecorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) chunks.push(e.data);
-    };
-    mediaRecorder.onstop = handleStop;
-
-    mediaRecorder.start();
-    setState("recording");
-    setStatus("Enregistrement en cours…");
-    startTs = Date.now();
-    tick();
-    tickInterval = setInterval(tick, 100);
-  };
-
-  const stopRecording = () => {
-    if (!mediaRecorder) return;
-    mediaRecorder.stop();
-    stream?.getTracks().forEach((t) => t.stop());
-    clearInterval(tickInterval);
-    setState("processing");
-    setStatus("Transcription et analyse…");
-  };
-
-  const tick = () => {
-    const s = ((Date.now() - startTs) / 1000).toFixed(1);
-    timer.textContent = `${s}s`;
-  };
-
-  const handleStop = async () => {
-    const blob = new Blob(chunks, { type: "audio/webm" });
-    try {
-      const fd = new FormData();
-      fd.append("audio", blob, "dictee.webm");
-
-      const resp = await fetch("/dicter-devis", { method: "POST", body: fd });
-      const data = await resp.json();
-
-      if (!resp.ok) {
-        setStatus("Erreur : " + (data.detail || resp.statusText), "err");
-        setState("idle");
-        return;
-      }
-
-      // Transcription
-      transcriptText.textContent = data.texte_transcrit;
-      transcriptPanel.classList.remove("hidden");
-
-      // Résultat
-      const resultat = data.resultat || {};
-      if (resultat.type === "devis" && resultat.devis) {
-        renderDevis(resultat.devis);
-        devisPanel.classList.remove("hidden");
-
-        renderClientDb(resultat.devis.client_db, resultat.devis.client);
-        clientDbPanel.classList.remove("hidden");
-      } else {
-        messageText.textContent = resultat.message || "Aucun devis détecté.";
-        messagePanel.classList.remove("hidden");
-      }
-
-      // Debug
-      debugJson.textContent = JSON.stringify(data, null, 2);
-      debugBlock.classList.remove("hidden");
-
-      setStatus("Terminé.", "ok");
-      timer.textContent = "";
-    } catch (err) {
-      setStatus("Erreur réseau : " + err.message, "err");
-    } finally {
-      setState("idle");
-    }
-  };
-
-  btn.addEventListener("click", () => {
-    if (btn.classList.contains("idle")) startRecording();
-    else if (btn.classList.contains("recording")) stopRecording();
   });
 
-  setState("idle");
+  // ================================================================
+  // Wiring des micros
+  // ================================================================
+
+  document.querySelectorAll(".mic-btn[data-target]").forEach((btn) => {
+    const champ = btn.getAttribute("data-target");
+    btn.addEventListener("click", () => {
+      if (btn.classList.contains("idle")) startRecording(btn, champ);
+      else if (btn.classList.contains("recording")) stopRecording(btn, champ);
+    });
+  });
+
+  // ================================================================
+  // Soumission : assemble un JSON de devis
+  // ================================================================
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+
+    const fournitures = [];
+    fournituresList.querySelectorAll(".fourniture-row").forEach((row) => {
+      const desc = row.querySelector(".f-desc").value.trim();
+      const marque = row.querySelector(".f-marque").value.trim();
+      const qteRaw = row.querySelector(".f-qte").value.trim();
+      if (!desc && !marque && !qteRaw) return;
+      fournitures.push({
+        description: desc || null,
+        marque: marque || null,
+        quantite: qteRaw ? Number(qteRaw) : null,
+      });
+    });
+
+    const devis = {
+      client: champClient.value.trim() || null,
+      client_db: clientState.mode === "trouve" ? clientState.client : null,
+      categorie: champCategorie.value.trim() || null,
+      fournitures,
+    };
+
+    debugJson.textContent = JSON.stringify(devis, null, 2);
+    debugBlock.classList.remove("hidden");
+    debugBlock.open = true;
+  });
 })();

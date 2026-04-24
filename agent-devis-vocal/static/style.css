@@ -26,34 +26,17 @@ body {
 }
 
 main {
-  max-width: 960px;
+  max-width: 720px;
   margin: 0 auto;
-}
-
-.results-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  align-items: start;
-  margin-top: 1rem;
-}
-.results-row .panel {
-  margin-top: 0;
-  min-width: 0;
-}
-@media (max-width: 720px) {
-  .results-row {
-    grid-template-columns: 1fr;
-  }
 }
 
 header {
   text-align: center;
-  margin-bottom: 2.5rem;
+  margin-bottom: 2rem;
 }
 
 header h1 {
-  font-size: 1.75rem;
+  font-size: 1.6rem;
   font-weight: 600;
   margin: 0 0 0.3rem;
   letter-spacing: -0.01em;
@@ -65,17 +48,70 @@ header h1 {
   font-size: 0.95rem;
 }
 
-/* ---------------- bouton micro ---------------- */
+/* ---------------- formulaire principal ---------------- */
 
-.record {
-  text-align: center;
-  margin-bottom: 2rem;
+.devis-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
 }
 
+.form-block {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1rem 1.25rem 1.1rem;
+  box-shadow: var(--shadow);
+}
+
+.form-block-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 0.6rem;
+}
+
+.input-row {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.champ-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.form-input {
+  font: inherit;
+  padding: 0.55rem 0.7rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--panel);
+  color: var(--text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+.form-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+}
+
+.mic-status {
+  margin: 0.5rem 0 0;
+  font-size: 0.82rem;
+  color: var(--muted);
+  min-height: 1em;
+}
+.mic-status.err { color: var(--danger); }
+.mic-status.ok  { color: var(--ok); }
+
+/* ---------------- bouton micro (petit) ---------------- */
+
 .mic-btn {
-  width: 96px;
-  height: 96px;
-  border-radius: 50%;
   border: none;
   cursor: pointer;
   color: #fff;
@@ -84,157 +120,138 @@ header h1 {
   justify-content: center;
   transition: transform 0.12s ease, background 0.2s ease, box-shadow 0.2s ease;
   box-shadow: var(--shadow);
+  border-radius: 50%;
 }
+.mic-btn:disabled { cursor: not-allowed; opacity: 0.7; }
 
-.mic-btn:disabled {
-  cursor: not-allowed;
-  opacity: 0.7;
+.mic-small {
+  width: 42px;
+  height: 42px;
+  flex-shrink: 0;
 }
+.mic-small .mic-icon { width: 20px; height: 20px; }
 
-.mic-icon {
-  width: 38px;
-  height: 38px;
-}
-
-.mic-btn.idle {
-  background: var(--accent);
-}
-.mic-btn.idle:hover {
-  background: var(--accent-strong);
-  transform: scale(1.04);
-}
-
-.mic-btn.recording {
-  background: var(--danger);
-  animation: pulse 1.4s ease-in-out infinite;
-}
-
-.mic-btn.processing {
-  background: var(--muted);
-  cursor: progress;
-}
-.mic-btn.processing .mic-icon {
-  animation: spin 1s linear infinite;
-}
+.mic-btn.idle        { background: var(--accent); }
+.mic-btn.idle:hover  { background: var(--accent-strong); transform: scale(1.05); }
+.mic-btn.recording   { background: var(--danger); animation: pulse 1.4s ease-in-out infinite; }
+.mic-btn.processing  { background: var(--muted); cursor: progress; }
+.mic-btn.processing .mic-icon { animation: spin 1s linear infinite; }
 
 @keyframes pulse {
   0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
-  50%      { box-shadow: 0 0 0 18px rgba(239, 68, 68, 0); }
+  50%      { box-shadow: 0 0 0 14px rgba(239, 68, 68, 0); }
 }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-@keyframes spin {
-  to { transform: rotate(360deg); }
-}
+/* ---------------- fournitures ---------------- */
 
-.timer {
-  margin: 0.9rem 0 0.2rem;
-  font-size: 1rem;
-  color: var(--accent);
-  font-variant-numeric: tabular-nums;
-  min-height: 1.2em;
-}
-
-.status {
-  margin: 0;
-  color: var(--muted);
-  font-size: 0.9rem;
-  min-height: 1.2em;
-}
-.status.err { color: var(--danger); }
-.status.ok  { color: var(--ok); }
-
-/* ---------------- panneaux résultats ---------------- */
-
-.panel {
-  background: var(--panel);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  padding: 1.25rem 1.5rem;
-  margin-top: 1rem;
-  box-shadow: var(--shadow);
-  animation: fade-in 0.25s ease;
-}
-
-.panel h2 {
-  margin: 0 0 0.75rem;
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.08em;
-}
-
-.panel p {
-  margin: 0;
-  line-height: 1.55;
-  white-space: pre-wrap;
-}
-
-.field {
+.fournitures-header {
   display: flex;
-  gap: 1rem;
-  padding: 0.5rem 0;
-  border-bottom: 1px solid var(--border);
-}
-.field:last-of-type { border-bottom: none; }
-
-.field .label,
-.fournitures .label {
-  flex: 0 0 90px;
-  color: var(--muted);
-  font-size: 0.85rem;
-  padding-top: 0.1rem;
-}
-
-.field .value {
-  flex: 1;
-  font-weight: 500;
-  text-transform: capitalize;
-}
-
-.field .value-address {
-  text-transform: none;
-  word-break: break-word;
-}
-
-.missing {
-  color: var(--missing);
-  font-style: italic;
-  font-weight: 400;
-}
-
-.fournitures {
-  margin-top: 1rem;
-  padding-top: 1rem;
-  border-top: 1px solid var(--border);
-}
-
-.fournitures .label {
-  display: block;
+  align-items: center;
+  justify-content: space-between;
   margin-bottom: 0.6rem;
 }
+.fournitures-header .form-block-label { margin-bottom: 0; }
 
-.fourniture-card {
-  background: var(--bg);
+.fournitures-actions {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.btn-add {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 0.75rem 1rem;
-  margin-bottom: 0.5rem;
+  background: var(--panel);
+  color: var(--accent);
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
 }
-.fourniture-card:last-child { margin-bottom: 0; }
-
-.fourniture-desc {
-  font-weight: 600;
-  margin-bottom: 0.35rem;
-  text-transform: capitalize;
+.btn-add:hover {
+  border-color: var(--accent);
+  background: rgba(59, 130, 246, 0.06);
 }
 
-.fourniture-line {
-  font-size: 0.9rem;
+.fournitures-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.fournitures-empty {
   color: var(--muted);
+  font-style: italic;
+  font-size: 0.9rem;
+  margin: 0;
+  padding: 0.5rem 0;
+  text-align: center;
 }
+
+.fourniture-row {
+  display: grid;
+  grid-template-columns: 2fr 1.3fr 0.7fr auto;
+  gap: 0.5rem;
+  align-items: center;
+}
+@media (max-width: 560px) {
+  .fourniture-row {
+    grid-template-columns: 1fr 1fr auto;
+  }
+  .fourniture-row .f-desc { grid-column: 1 / -2; }
+}
+
+.fourniture-input { min-width: 0; }
+
+.btn-remove {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  font-size: 1.2rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.btn-remove:hover {
+  border-color: var(--danger);
+  color: var(--danger);
+  background: rgba(239, 68, 68, 0.05);
+}
+
+/* ---------------- footer ---------------- */
+
+.form-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 0.5rem;
+}
+
+.form-submit {
+  padding: 0.65rem 1.25rem;
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.form-submit:hover { background: var(--accent-strong); }
+.form-submit:disabled { background: var(--muted); cursor: progress; }
 
 /* ---------------- fiche client DB ---------------- */
+
+.client-db-content {
+  margin-top: 0.9rem;
+}
+.client-db-content:empty { margin-top: 0; }
 
 .client-status {
   display: inline-block;
@@ -277,35 +294,20 @@ header h1 {
   border-color: var(--accent);
   background: rgba(59, 130, 246, 0.04);
 }
-.client-card-choice.selected {
-  border-color: var(--accent);
-  background: rgba(59, 130, 246, 0.08);
-  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
-}
 
 .client-name {
   font-weight: 600;
   font-size: 1rem;
   margin-bottom: 0.35rem;
 }
-
 .client-line {
   font-size: 0.9rem;
   color: var(--text);
   line-height: 1.5;
 }
+.client-contact { color: var(--muted); }
 
-.client-contact {
-  color: var(--muted);
-}
-
-.client-unknown {
-  padding: 0.75rem 1rem;
-  background: rgba(239, 68, 68, 0.08);
-  color: #b91c1c;
-  border-radius: 8px;
-  font-size: 0.9rem;
-}
+/* ---------------- formulaire nouveau client ---------------- */
 
 .new-client-form {
   display: flex;
@@ -323,41 +325,6 @@ header h1 {
 .form-label {
   font-size: 0.8rem;
   color: var(--muted);
-}
-
-.form-input {
-  font: inherit;
-  padding: 0.5rem 0.65rem;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  background: var(--panel);
-  color: var(--text);
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
-}
-.form-input:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
-}
-
-.form-submit {
-  margin-top: 0.5rem;
-  padding: 0.6rem 1rem;
-  background: var(--accent);
-  color: #fff;
-  border: none;
-  border-radius: 8px;
-  font: inherit;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 0.15s ease;
-}
-.form-submit:hover {
-  background: var(--accent-strong);
-}
-.form-submit:disabled {
-  background: var(--muted);
-  cursor: progress;
 }
 
 .form-error {
@@ -408,8 +375,3 @@ header h1 {
 /* ---------------- utils ---------------- */
 
 .hidden { display: none; }
-
-@keyframes fade-in {
-  from { opacity: 0; transform: translateY(4px); }
-  to   { opacity: 1; transform: translateY(0); }
-}

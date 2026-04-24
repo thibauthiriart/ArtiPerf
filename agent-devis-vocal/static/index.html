@@ -2,79 +2,92 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" />
-  <title>Devis Vocal</title>
+  <title>Devis Vocal — Formulaire</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
   <main>
     <header>
-      <h1>Devis Vocal</h1>
-      <p class="sub">Dictez votre devis, l'assistant extrait les informations.</p>
+      <h1>Devis Vocal — Formulaire</h1>
+      <p class="sub">Remplissez chaque champ à la voix ou au clavier.</p>
     </header>
 
-    <section class="record">
-      <button id="btn" class="mic-btn idle" type="button" aria-label="Enregistrer">
-        <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <rect x="9" y="2" width="6" height="12" rx="3"></rect>
-          <path d="M5 10a7 7 0 0 0 14 0"></path>
-          <line x1="12" y1="19" x2="12" y2="23"></line>
-          <line x1="8" y1="23" x2="16" y2="23"></line>
-        </svg>
-      </button>
-      <p id="timer" class="timer" aria-live="polite"></p>
-      <p id="status" class="status" aria-live="polite">Cliquez sur le micro pour démarrer</p>
-    </section>
+    <form id="devis-form" class="devis-form" autocomplete="off">
 
-    <section id="transcript" class="panel hidden">
-      <h2>Transcription</h2>
-      <p id="transcript-text"></p>
-    </section>
-
-    <div class="results-row">
-      <section id="devis" class="panel hidden">
-        <h2>Devis extrait</h2>
-
-        <div class="field">
-          <span class="label">Client dicté</span>
-          <span id="devis-client" class="value"></span>
+      <!-- ========== CLIENT ========== -->
+      <section class="form-block" data-champ="client">
+        <label class="form-block-label" for="champ-client">Client</label>
+        <div class="input-row">
+          <input id="champ-client" class="form-input champ-input"
+                 type="text" placeholder="Nom du client…" />
+          <button class="mic-btn mic-small idle" type="button"
+                  data-target="client" aria-label="Dicter le client">
+            <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="2" width="6" height="12" rx="3"></rect>
+              <path d="M5 10a7 7 0 0 0 14 0"></path>
+              <line x1="12" y1="19" x2="12" y2="23"></line>
+              <line x1="8" y1="23" x2="16" y2="23"></line>
+            </svg>
+          </button>
         </div>
+        <p class="mic-status" data-status="client"></p>
+        <div id="client-db-content" class="client-db-content"></div>
+      </section>
 
-        <div class="field">
-          <span class="label">Domaine</span>
-          <span id="devis-domaine" class="value"></span>
+      <!-- ========== CATÉGORIE ========== -->
+      <section class="form-block" data-champ="categorie">
+        <label class="form-block-label" for="champ-categorie">Catégorie</label>
+        <div class="input-row">
+          <input id="champ-categorie" class="form-input champ-input"
+                 type="text" placeholder="Carrelage, plomberie, peinture…" />
+          <button class="mic-btn mic-small idle" type="button"
+                  data-target="categorie" aria-label="Dicter la catégorie">
+            <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="9" y="2" width="6" height="12" rx="3"></rect>
+              <path d="M5 10a7 7 0 0 0 14 0"></path>
+              <line x1="12" y1="19" x2="12" y2="23"></line>
+              <line x1="8" y1="23" x2="16" y2="23"></line>
+            </svg>
+          </button>
         </div>
+        <p class="mic-status" data-status="categorie"></p>
+      </section>
 
-        <div id="devis-address-field" class="field hidden">
-          <span class="label">Adresse</span>
-          <span id="devis-address" class="value value-address"></span>
+      <!-- ========== FOURNITURES ========== -->
+      <section class="form-block" data-champ="fourniture">
+        <div class="fournitures-header">
+          <span class="form-block-label">Fournitures</span>
+          <div class="fournitures-actions">
+            <button type="button" id="btn-add-fourniture"
+                    class="btn-add" aria-label="Ajouter une ligne vide">+</button>
+            <button class="mic-btn mic-small idle" type="button"
+                    data-target="fourniture" aria-label="Dicter une fourniture">
+              <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                   stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="9" y="2" width="6" height="12" rx="3"></rect>
+                <path d="M5 10a7 7 0 0 0 14 0"></path>
+                <line x1="12" y1="19" x2="12" y2="23"></line>
+                <line x1="8" y1="23" x2="16" y2="23"></line>
+              </svg>
+            </button>
+          </div>
         </div>
-
-        <div id="devis-phone-field" class="field hidden">
-          <span class="label">Téléphone</span>
-          <span id="devis-phone" class="value"></span>
-        </div>
-
-        <div class="fournitures">
-          <span class="label">Fournitures</span>
-          <div id="devis-fournitures"></div>
+        <p class="mic-status" data-status="fourniture"></p>
+        <div id="fournitures-list" class="fournitures-list">
+          <p class="fournitures-empty">Aucune fourniture — dictez-en une ou cliquez sur +</p>
         </div>
       </section>
 
-      <section id="client-db" class="panel hidden">
-        <h2>Fiche client</h2>
-        <div id="client-db-content"></div>
-      </section>
-    </div>
-
-    <section id="message" class="panel hidden">
-      <h2>Message</h2>
-      <p id="message-text"></p>
-    </section>
+      <div class="form-footer">
+        <button type="submit" class="form-submit">Valider le devis</button>
+      </div>
+    </form>
 
     <details id="debug" class="debug hidden">
-      <summary>JSON brut (debug)</summary>
+      <summary>JSON du devis (debug)</summary>
       <pre id="debug-json"></pre>
     </details>
   </main>

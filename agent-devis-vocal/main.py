@@ -16,7 +16,13 @@ from clients import rechercher_client
 from llm import appeler_llm, appeler_llm_json
 from memory.store import store, recall_as_text
 from transcribe import transcrire_fichier
-from config import SYSTEM_PROMPT, DEVIS_EXTRACTION_PROMPT
+from config import (
+    SYSTEM_PROMPT,
+    DEVIS_EXTRACTION_PROMPT,
+    CLIENT_FIELD_PROMPT,
+    CATEGORIE_FIELD_PROMPT,
+    FOURNITURE_FIELD_PROMPT,
+)
 
 logging.basicConfig(
     level=logging.INFO,
@@ -64,6 +70,72 @@ def reponse_directe(texte):
         "domaine de travaux, fournitures)."
     )
     return appeler_llm(prompt, system_prompt=SYSTEM_PROMPT)
+
+
+# === Extraction par champ (formulaire assisté) ===
+
+def extraire_champ_client(texte):
+    """
+    Extrait le nom de client depuis une dictée courte, puis interroge la base.
+    Retourne :
+        {
+          "client": "Nom dicté ou null",
+          "nouveau_client": bool,
+          "client_db": {status, nom_cherche, client, candidats}
+        }
+    """
+    logger.info("Outil : extraire_champ_client")
+    prompt = f"{CLIENT_FIELD_PROMPT}\n\nDictée à analyser :\n« {texte} »"
+    schema = '{"client": "Nom ou null", "nouveau_client": "true ou false"}'
+    donnees = appeler_llm_json(prompt, schema, system_prompt=SYSTEM_PROMPT)
+
+    nom = donnees.get("client")
+    nouveau = bool(donnees.get("nouveau_client"))
+
+    if nouveau:
+        client_db = {
+            "status": "inconnu",
+            "nom_cherche": nom,
+            "client": None,
+            "candidats": [],
+        }
+    elif nom:
+        client_db = rechercher_client(nom)
+    else:
+        client_db = {
+            "status": "inconnu",
+            "nom_cherche": None,
+            "client": None,
+            "candidats": [],
+        }
+
+    return {"client": nom, "nouveau_client": nouveau, "client_db": client_db}
+
+
+def extraire_champ_categorie(texte):
+    """Extrait le domaine de travaux depuis une dictée courte."""
+    logger.info("Outil : extraire_champ_categorie")
+    prompt = f"{CATEGORIE_FIELD_PROMPT}\n\nDictée à analyser :\n« {texte} »"
+    schema = '{"categorie": "type de travaux ou null"}'
+    donnees = appeler_llm_json(prompt, schema, system_prompt=SYSTEM_PROMPT)
+    return {"categorie": donnees.get("categorie")}
+
+
+def extraire_champ_fourniture(texte):
+    """Extrait UNE fourniture depuis une dictée courte."""
+    logger.info("Outil : extraire_champ_fourniture")
+    prompt = f"{FOURNITURE_FIELD_PROMPT}\n\nDictée à analyser :\n« {texte} »"
+    schema = (
+        '{"description": "produit ou null", '
+        '"marque": "marque ou null", '
+        '"quantite": "entier ou null"}'
+    )
+    donnees = appeler_llm_json(prompt, schema, system_prompt=SYSTEM_PROMPT)
+    return {
+        "description": donnees.get("description"),
+        "marque": donnees.get("marque"),
+        "quantite": donnees.get("quantite"),
+    }
 
 
 # === Agent : routeur + exécution ===
