@@ -7,13 +7,63 @@
   <link rel="stylesheet" href="/static/style.css" />
 </head>
 <body>
+  <div class="layout">
+  <aside class="sidebar">
+    <h2 class="sidebar-title">Liste des clients connus</h2>
+    <ul id="clients-list" class="clients-list" aria-live="polite">
+      <li class="clients-empty">Chargement…</li>
+    </ul>
+  </aside>
+
   <main>
     <header>
       <h1>Devis Vocal</h1>
       <p class="sub">Dictez votre devis, l'assistant extrait les informations.</p>
+
+      <div id="usage-bar" class="usage-bar">
+        <div class="usage-session">
+          <span class="usage-label">Session</span>
+          <span class="usage-line">
+            <span id="usage-session-tokens">0 tokens</span>
+            ·
+            <span id="usage-session-audio">0 s audio</span>
+            ·
+            <strong id="usage-session-cost">$0.00000</strong>
+            <span class="usage-sub">(<span id="usage-session-count">0</span> requête·s)</span>
+          </span>
+        </div>
+        <details id="usage-last" class="usage-last hidden">
+          <summary>Dernière requête : <strong id="usage-last-cost">$0.00000</strong></summary>
+          <ul class="usage-detail">
+            <li>
+              <span class="usage-detail-label">Whisper <span class="usage-detail-model" id="usage-w-model"></span></span>
+              <span class="usage-detail-value" id="usage-w-line"></span>
+            </li>
+            <li>
+              <span class="usage-detail-label">LLM routeur <span class="usage-detail-model" id="usage-r-model"></span></span>
+              <span class="usage-detail-value" id="usage-r-line"></span>
+            </li>
+            <li>
+              <span class="usage-detail-label">LLM <span id="usage-o-name"></span> <span class="usage-detail-model" id="usage-o-model"></span></span>
+              <span class="usage-detail-value" id="usage-o-line"></span>
+            </li>
+          </ul>
+        </details>
+      </div>
     </header>
 
     <section class="record">
+      <div class="examples">
+        <p class="examples-title">Exemples de dictée</p>
+        <ul class="examples-list">
+          <li>« Devis pour Madame Dupont en carrelage. 17 m² de carreaux Marazzi à 25 € le m². Pose à 30 € le m². Forfait livraison 50 €. »</li>
+          <li>« Devis pour Monsieur Dupont en plomberie, on va installer un robinet Grohe à 80 € et deux lavabos à 150 € pièce. »</li>
+          <li>« Trois lavabos Grohe et un robinet, j'ai pas le prix. » <span class="examples-hint">(prix à compléter)</span></li>
+          <li>« Devis pour Madame Martin en carrelage. » <span class="examples-hint">(client ambigu — choisir dans la liste)</span></li>
+          <li>« Nouveau client Jean Lecoustre en peinture, 40 m² à 18 € le m². » <span class="examples-hint">(crée la fiche client)</span></li>
+        </ul>
+      </div>
+
       <button id="btn" class="mic-btn idle" type="button" aria-label="Enregistrer">
         <svg class="mic-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -57,8 +107,16 @@
         </div>
 
         <div class="fournitures">
-          <span class="label">Fournitures</span>
-          <div id="devis-fournitures"></div>
+          <span class="label">Lignes du devis</span>
+          <div id="devis-lignes"></div>
+        </div>
+
+        <div id="devis-totaux" class="devis-totaux hidden">
+          <div class="totaux-row">
+            <span>Total HT</span>
+            <strong id="devis-total-ht"></strong>
+          </div>
+          <p id="devis-total-warn" class="totaux-warn hidden"></p>
         </div>
       </section>
 
@@ -78,6 +136,7 @@
       <pre id="debug-json"></pre>
     </details>
   </main>
+  </div>
 
   <script src="/static/app.js"></script>
 </body>

@@ -21,9 +21,14 @@ MAX_RETRIES = 2
 RETRY_BASE_DELAY = 1  # secondes
 
 
+def _err(message):
+    """Réponse d'erreur normalisée — usage à zéro pour ne pas fausser la facturation."""
+    return {"texte": message, "usage": {"input_tokens": 0, "output_tokens": 0}}
+
+
 def appeler_llm(question, system_prompt=None, temperature=None, max_tokens=None):
     """
-    Appelle le LLM configuré et retourne la réponse texte.
+    Appelle le LLM configuré et retourne {"texte": str, "usage": {input_tokens, output_tokens}}.
     Gère toutes les exceptions API avec retry sur les erreurs temporaires.
     """
     system_prompt = system_prompt or SYSTEM_PROMPT
@@ -40,12 +45,12 @@ def appeler_llm(question, system_prompt=None, temperature=None, max_tokens=None)
             elif LLM_PROVIDER == "mistral":
                 return _appeler_mistral(question, system_prompt, temperature, max_tokens)
             else:
-                return f"Erreur : provider '{LLM_PROVIDER}' non supporté."
+                return _err(f"Erreur : provider '{LLM_PROVIDER}' non supporté.")
 
         # === Erreurs d'authentification (pas de retry) ===
         except _get_auth_errors() as e:
             logger.error(f"Clé API invalide ({LLM_PROVIDER}) : {e}")
-            return "Erreur : clé API invalide. Vérifiez votre configuration dans .env."
+            return _err("Erreur : clé API invalide. Vérifiez votre configuration dans .env.")
 
         # === Erreurs de connexion (retry) ===
         except _get_connection_errors() as e:
@@ -56,7 +61,7 @@ def appeler_llm(question, system_prompt=None, temperature=None, max_tokens=None)
                 time.sleep(delay)
             else:
                 logger.error(f"Erreur connexion après {MAX_RETRIES} tentatives : {e}")
-                return "Erreur : impossible de joindre le service. Vérifiez votre connexion internet."
+                return _err("Erreur : impossible de joindre le service. Vérifiez votre connexion internet.")
 
         # === Timeout (retry) ===
         except _get_timeout_errors() as e:
@@ -67,7 +72,7 @@ def appeler_llm(question, system_prompt=None, temperature=None, max_tokens=None)
                 time.sleep(delay)
             else:
                 logger.error(f"Timeout après {MAX_RETRIES} tentatives : {e}")
-                return "Erreur : le service met trop de temps à répondre. Réessayez dans quelques instants."
+                return _err("Erreur : le service met trop de temps à répondre. Réessayez dans quelques instants.")
 
         # === Rate limit / quota dépassé (retry avec délai plus long) ===
         except _get_rate_limit_errors() as e:
@@ -78,27 +83,28 @@ def appeler_llm(question, system_prompt=None, temperature=None, max_tokens=None)
                 time.sleep(delay)
             else:
                 logger.error(f"Rate limit dépassé après {MAX_RETRIES} tentatives : {e}")
-                return "Erreur : quota API dépassé. Attendez quelques minutes ou vérifiez votre plan."
+                return _err("Erreur : quota API dépassé. Attendez quelques minutes ou vérifiez votre plan.")
 
         # === Erreur de statut API (modèle inexistant, requête invalide, etc.) ===
         except _get_status_errors() as e:
             duration = time.time() - start
             logger.error(f"Erreur API ({duration:.1f}s) : {e}")
-            return f"Erreur API : {e}"
+            return _err(f"Erreur API : {e}")
 
         # === Erreur inattendue (pas de retry) ===
         except Exception as e:
             duration = time.time() - start
             logger.error(f"Erreur inattendue ({duration:.1f}s) : {type(e).__name__} — {e}")
-            return f"Erreur inattendue : {e}"
+            return _err(f"Erreur inattendue : {e}")
 
-    return "Erreur : échec après plusieurs tentatives."
+    return _err("Erreur : échec après plusieurs tentatives.")
 
 
 def appeler_llm_json(question, schema_attendu, system_prompt=None):
     """
     Appelle le LLM et parse la réponse en JSON.
-    Fallback regex si le LLM ajoute du texte autour du JSON.
+    Retourne {"data": dict, "usage": {...}} — `data` contient soit le JSON parsé,
+    soit {"erreur": "...", "brut": "..."} en cas d'échec de parsing.
     """
     prompt_json = f"""{question}
 
@@ -107,23 +113,23 @@ Réponds UNIQUEMENT en JSON valide avec ce schéma :
 
 Ne mets aucun texte avant ou après le JSON."""
 
-    reponse_brute = appeler_llm(prompt_json, system_prompt)
+    res = appeler_llm(prompt_json, system_prompt)
+    reponse_brute = res["texte"]
+    usage = res["usage"]
 
-    # Si c'est un message d'erreur, le retourner tel quel
     if reponse_brute.startswith("Erreur"):
-        return {"erreur": reponse_brute}
+        return {"data": {"erreur": reponse_brute}, "usage": usage}
 
     try:
-        return json.loads(reponse_brute)
+        return {"data": json.loads(reponse_brute), "usage": usage}
     except json.JSONDecodeError:
-        # Fallback : extraire le JSON du texte
         match = re.search(r'\{.*\}', reponse_brute, re.DOTALL)
         if match:
             try:
-                return json.loads(match.group())
+                return {"data": json.loads(match.group()), "usage": usage}
             except json.JSONDecodeError:
                 pass
-        return {"erreur": "Réponse non-JSON", "brut": reponse_brute}
+        return {"data": {"erreur": "Réponse non-JSON", "brut": reponse_brute}, "usage": usage}
 
 
 # ================================================================
@@ -238,7 +244,14 @@ def _appeler_openai(question, system_prompt, temperature, max_tokens):
         temperature=temperature,
         max_output_tokens=max_tokens,
     )
-    return response.output_text
+    usage = getattr(response, "usage", None)
+    return {
+        "texte": response.output_text,
+        "usage": {
+            "input_tokens": getattr(usage, "input_tokens", 0) or 0,
+            "output_tokens": getattr(usage, "output_tokens", 0) or 0,
+        },
+    }
 
 
 def _appeler_anthropic(question, system_prompt, temperature, max_tokens):
@@ -253,7 +266,14 @@ def _appeler_anthropic(question, system_prompt, temperature, max_tokens):
         system=system_prompt,
         messages=[{"role": "user", "content": question}]
     )
-    return response.content[0].text
+    usage = getattr(response, "usage", None)
+    return {
+        "texte": response.content[0].text,
+        "usage": {
+            "input_tokens": getattr(usage, "input_tokens", 0) or 0,
+            "output_tokens": getattr(usage, "output_tokens", 0) or 0,
+        },
+    }
 
 
 def _appeler_mistral(question, system_prompt, temperature, max_tokens):
@@ -271,4 +291,11 @@ def _appeler_mistral(question, system_prompt, temperature, max_tokens):
         temperature=temperature,
         max_tokens=max_tokens,
     )
-    return response.choices[0].message.content
+    usage = getattr(response, "usage", None)
+    return {
+        "texte": response.choices[0].message.content,
+        "usage": {
+            "input_tokens": getattr(usage, "prompt_tokens", 0) or 0,
+            "output_tokens": getattr(usage, "completion_tokens", 0) or 0,
+        },
+    }

@@ -153,6 +153,21 @@ def rechercher_client(nom_dicte):
     }
 
 
+def lister_clients():
+    """Retourne tous les clients triés par nom puis prénom."""
+    if not DB_PATH.exists():
+        logger.error(f"Base clients absente : {DB_PATH}")
+        return []
+
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute(
+        "SELECT * FROM clients ORDER BY nom COLLATE NOCASE, prenom COLLATE NOCASE"
+    ).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
 def creer_client(data):
     """
     Insère un nouveau client en base. `data` est un dict avec au minimum "nom".

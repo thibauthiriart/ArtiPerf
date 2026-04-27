@@ -63,6 +63,7 @@ def transcrire_fichier(chemin):
     return {
         "texte": texte,
         "duree_s": round(duree, 2),
+        "audio_seconds": resultat.get("audio_seconds", 0.0),
         "langue": resultat.get("langue", WHISPER_LANGUAGE),
         "modele": WHISPER_MODEL,
         "taille_mo": round(taille_mo, 2),
@@ -95,6 +96,7 @@ def transcrire_bytes(data, nom_fichier="audio.webm"):
     return {
         "texte": texte,
         "duree_s": round(duree, 2),
+        "audio_seconds": resultat.get("audio_seconds", 0.0),
         "langue": resultat.get("langue", WHISPER_LANGUAGE),
         "modele": WHISPER_MODEL,
         "taille_mo": round(taille_mo, 2),
@@ -115,9 +117,10 @@ def _appel_whisper(file_arg, nom):
 
     # Suivant response_format, l'objet varie
     if WHISPER_RESPONSE_FORMAT == "text":
-        return {"texte": str(response)}
-    # json / verbose_json → .text existe
+        return {"texte": str(response), "audio_seconds": 0.0}
+    # json / verbose_json → .text existe ; verbose_json fournit aussi .duration
     return {
         "texte": getattr(response, "text", str(response)),
         "langue": getattr(response, "language", None),
+        "audio_seconds": float(getattr(response, "duration", 0.0) or 0.0),
     }

@@ -22,10 +22,24 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from clients import creer_client
-from config import API_HOST, API_PORT
+from clients import creer_client, lister_clients
+from config import (
+    API_HOST, API_PORT, WHISPER_MODEL,
+    PRICE_LLM_INPUT_PER_MTOK, PRICE_LLM_OUTPUT_PER_MTOK, PRICE_WHISPER_PER_MIN,
+)
 from main import agent
 from transcribe import transcrire_bytes
+
+
+def _cost_llm(input_tokens: int, output_tokens: int) -> float:
+    return (
+        input_tokens * PRICE_LLM_INPUT_PER_MTOK / 1_000_000
+        + output_tokens * PRICE_LLM_OUTPUT_PER_MTOK / 1_000_000
+    )
+
+
+def _cost_whisper(audio_seconds: float) -> float:
+    return (audio_seconds / 60.0) * PRICE_WHISPER_PER_MIN
 
 logging.basicConfig(
     level=logging.INFO,
@@ -52,6 +66,7 @@ class DicterDevisResponse(BaseModel):
     duree_transcription_s: float
     duree_agent_ms: int
     resultat: dict[str, Any]  # {type, devis, message}
+    usage: dict[str, Any]     # {whisper, llm_routeur, llm_outil, total_cost_usd}
 
 
 class ClientCreate(BaseModel):
@@ -90,6 +105,12 @@ def index():
 
 
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.get("/clients")
+def lister_clients_endpoint():
+    """Liste tous les clients triés par nom puis prénom."""
+    return lister_clients()
 
 
 @app.post("/clients", status_code=201)
@@ -152,9 +173,42 @@ async def dicter_devis(audio: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Agent : {e}")
 
     duree_agent_ms = int((time.time() - start) * 1000)
+
+    # Calcul des coûts
+    audio_s = float(res.get("audio_seconds") or 0.0)
+    cost_whisper = _cost_whisper(audio_s)
+
+    usage_llm = resultat.pop("usage_llm", {})
+    routeur = usage_llm.get("routeur", {})
+    outil = usage_llm.get("outil", {})
+    cost_routeur = _cost_llm(routeur.get("input_tokens", 0), routeur.get("output_tokens", 0))
+    cost_outil = _cost_llm(outil.get("input_tokens", 0), outil.get("output_tokens", 0))
+
+    usage = {
+        "whisper": {
+            "model": WHISPER_MODEL,
+            "audio_seconds": round(audio_s, 2),
+            "cost_usd": cost_whisper,
+        },
+        "llm_routeur": {
+            "model": routeur.get("model"),
+            "input_tokens": routeur.get("input_tokens", 0),
+            "output_tokens": routeur.get("output_tokens", 0),
+            "cost_usd": cost_routeur,
+        },
+        "llm_outil": {
+            "model": outil.get("model"),
+            "nom": outil.get("nom"),
+            "input_tokens": outil.get("input_tokens", 0),
+            "output_tokens": outil.get("output_tokens", 0),
+            "cost_usd": cost_outil,
+        },
+        "total_cost_usd": cost_whisper + cost_routeur + cost_outil,
+    }
+
     logger.info(
-        f"OK | transcr {res['duree_s']}s | agent {duree_agent_ms}ms "
-        f"| type={resultat.get('type')} | « {texte[:60]} »"
+        f"OK | transcr {res['duree_s']}s ({audio_s:.1f}s audio) | agent {duree_agent_ms}ms "
+        f"| coût ${usage['total_cost_usd']:.5f} | type={resultat.get('type')} | « {texte[:60]} »"
     )
 
     return DicterDevisResponse(
@@ -162,6 +216,7 @@ async def dicter_devis(audio: UploadFile = File(...)):
         duree_transcription_s=res["duree_s"],
         duree_agent_ms=duree_agent_ms,
         resultat=resultat,
+        usage=usage,
     )
 
 

@@ -10,7 +10,10 @@
   const devisPanel = document.getElementById("devis");
   const devisClient = document.getElementById("devis-client");
   const devisDomaine = document.getElementById("devis-domaine");
-  const devisFournitures = document.getElementById("devis-fournitures");
+  const devisLignes = document.getElementById("devis-lignes");
+  const devisTotauxBlock = document.getElementById("devis-totaux");
+  const devisTotalHt = document.getElementById("devis-total-ht");
+  const devisTotalWarn = document.getElementById("devis-total-warn");
 
   const clientDbPanel = document.getElementById("client-db");
   const clientDbContent = document.getElementById("client-db-content");
@@ -25,6 +28,104 @@
 
   const debugBlock = document.getElementById("debug");
   const debugJson = document.getElementById("debug-json");
+
+  const clientsList = document.getElementById("clients-list");
+
+  // ---------- usage / coût ----------
+  const sessionUsage = {
+    requests: 0,
+    inputTokens: 0,
+    outputTokens: 0,
+    audioSeconds: 0,
+    costUsd: 0,
+  };
+
+  const fmtUsd = (v) => "$" + (v || 0).toFixed(5);
+  const fmtTokens = (n) => `${n.toLocaleString("fr-FR")} tok`;
+
+  const updateLastUsage = (usage) => {
+    const last = document.getElementById("usage-last");
+    last.classList.remove("hidden");
+    document.getElementById("usage-last-cost").textContent = fmtUsd(usage.total_cost_usd);
+
+    const w = usage.whisper || {};
+    document.getElementById("usage-w-model").textContent = w.model ? `(${w.model})` : "";
+    document.getElementById("usage-w-line").textContent =
+      `${(w.audio_seconds || 0).toFixed(1)}s audio · ${fmtUsd(w.cost_usd)}`;
+
+    const r = usage.llm_routeur || {};
+    document.getElementById("usage-r-model").textContent = r.model ? `(${r.model})` : "";
+    document.getElementById("usage-r-line").textContent =
+      `${r.input_tokens || 0} in + ${r.output_tokens || 0} out · ${fmtUsd(r.cost_usd)}`;
+
+    const o = usage.llm_outil || {};
+    document.getElementById("usage-o-name").textContent = o.nom || "";
+    document.getElementById("usage-o-model").textContent = o.model ? `(${o.model})` : "";
+    document.getElementById("usage-o-line").textContent =
+      `${o.input_tokens || 0} in + ${o.output_tokens || 0} out · ${fmtUsd(o.cost_usd)}`;
+  };
+
+  const updateSessionUsage = (usage) => {
+    const w = usage.whisper || {};
+    const r = usage.llm_routeur || {};
+    const o = usage.llm_outil || {};
+
+    sessionUsage.requests += 1;
+    sessionUsage.inputTokens += (r.input_tokens || 0) + (o.input_tokens || 0);
+    sessionUsage.outputTokens += (r.output_tokens || 0) + (o.output_tokens || 0);
+    sessionUsage.audioSeconds += w.audio_seconds || 0;
+    sessionUsage.costUsd += usage.total_cost_usd || 0;
+
+    document.getElementById("usage-session-tokens").textContent =
+      fmtTokens(sessionUsage.inputTokens + sessionUsage.outputTokens) +
+      ` (${sessionUsage.inputTokens} in / ${sessionUsage.outputTokens} out)`;
+    document.getElementById("usage-session-audio").textContent =
+      sessionUsage.audioSeconds.toFixed(1) + " s audio";
+    document.getElementById("usage-session-cost").textContent = fmtUsd(sessionUsage.costUsd);
+    document.getElementById("usage-session-count").textContent = sessionUsage.requests;
+  };
+
+  // ---------- liste des clients (sidebar) ----------
+  const renderClientsList = (clients) => {
+    clientsList.replaceChildren();
+    if (!clients || clients.length === 0) {
+      const li = document.createElement("li");
+      li.className = "clients-empty";
+      li.textContent = "Aucun client en base.";
+      clientsList.appendChild(li);
+      return;
+    }
+    for (const c of clients) {
+      const li = document.createElement("li");
+      li.className = "client-item";
+      const name = document.createElement("span");
+      name.className = "client-item-name";
+      name.textContent = [c.civilite, c.prenom, c.nom].filter(Boolean).join(" ");
+      li.appendChild(name);
+      if (c.ville) {
+        const city = document.createElement("span");
+        city.className = "client-item-city";
+        city.textContent = [c.code_postal, c.ville].filter(Boolean).join(" ");
+        li.appendChild(city);
+      }
+      clientsList.appendChild(li);
+    }
+  };
+
+  const refreshClientsList = async () => {
+    try {
+      const resp = await fetch("/clients");
+      if (!resp.ok) throw new Error(resp.statusText);
+      const data = await resp.json();
+      renderClientsList(data);
+    } catch (err) {
+      clientsList.replaceChildren();
+      const li = document.createElement("li");
+      li.className = "clients-empty";
+      li.textContent = "Impossible de charger la liste.";
+      clientsList.appendChild(li);
+    }
+  };
 
   let mediaRecorder = null;
   let chunks = [];
@@ -280,6 +381,7 @@
           return;
         }
         renderConfirmed(data);
+        refreshClientsList();
       } catch (err) {
         errorBox.textContent = "Erreur réseau : " + err.message;
         errorBox.classList.remove("hidden");
@@ -322,39 +424,122 @@
     }
   };
 
+  const TYPE_LABEL = {
+    fourniture: "Fourniture",
+    pose: "Pose",
+    frais_annexe: "Frais",
+  };
+  const SOUS_TYPE_LABEL = {
+    transport: "Transport",
+    deplacement: "Déplacement",
+    location_materiel: "Location matériel",
+    evacuation_dechets: "Évacuation déchets",
+    autre: "Autre",
+  };
+  const UNITE_LABEL = {
+    piece: "pièce",
+    m2: "m²",
+    ml: "ml",
+    heure: "h",
+    forfait: "forfait",
+  };
+
+  const fmtEur = (v) =>
+    v == null ? null : v.toLocaleString("fr-FR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " €";
+
+  const fmtQte = (q, unite) => {
+    if (q == null) return "—";
+    const u = UNITE_LABEL[unite] || unite || "";
+    if (unite === "forfait") return u;
+    const n = Number.isInteger(q) ? q : q.toLocaleString("fr-FR");
+    return `${n} ${u}`.trim();
+  };
+
   const renderDevis = (devis) => {
     devisClient.replaceChildren(formatValue(devis.client));
     devisDomaine.replaceChildren(formatValue(devis.domaine));
 
-    devisFournitures.replaceChildren();
-    const fournitures = devis.fournitures || [];
+    devisLignes.replaceChildren();
+    const lignes = devis.lignes || [];
 
-    if (fournitures.length === 0) {
+    if (lignes.length === 0) {
       const empty = document.createElement("p");
       empty.className = "missing";
-      empty.textContent = "Aucune fourniture détectée";
-      devisFournitures.appendChild(empty);
+      empty.textContent = "Aucune ligne détectée";
+      devisLignes.appendChild(empty);
+      devisTotauxBlock.classList.add("hidden");
       return;
     }
 
-    for (const f of fournitures) {
+    for (const l of lignes) {
       const card = document.createElement("div");
-      card.className = "fourniture-card";
+      card.className = `ligne-card ligne-type-${l.type}`;
+      if (l.prix_a_completer) card.classList.add("ligne-incomplete");
 
-      const desc = document.createElement("div");
-      desc.className = "fourniture-desc";
-      desc.textContent = f.description || "—";
+      // Header : badge type + description + (marque)
+      const head = document.createElement("div");
+      head.className = "ligne-head";
 
-      const marque = document.createElement("div");
-      marque.className = "fourniture-line";
-      marque.append("Marque : ", formatValue(f.marque));
+      const badge = document.createElement("span");
+      badge.className = `ligne-badge badge-${l.type}`;
+      badge.textContent = l.sous_type
+        ? SOUS_TYPE_LABEL[l.sous_type] || TYPE_LABEL[l.type]
+        : TYPE_LABEL[l.type] || l.type;
+      head.appendChild(badge);
 
-      const qte = document.createElement("div");
-      qte.className = "fourniture-line";
-      qte.append("Quantité : ", formatValue(f.quantite));
+      const desc = document.createElement("span");
+      desc.className = "ligne-desc";
+      desc.textContent = l.description || "—";
+      head.appendChild(desc);
 
-      card.append(desc, marque, qte);
-      devisFournitures.appendChild(card);
+      if (l.marque) {
+        const marque = document.createElement("span");
+        marque.className = "ligne-marque";
+        marque.textContent = l.marque;
+        head.appendChild(marque);
+      }
+
+      card.appendChild(head);
+
+      // Détail : qté × prix = total
+      const detail = document.createElement("div");
+      detail.className = "ligne-detail";
+
+      const qte = document.createElement("span");
+      qte.className = "ligne-qte";
+      qte.textContent = fmtQte(l.quantite, l.unite);
+
+      const sep = document.createElement("span");
+      sep.className = "ligne-sep";
+      sep.textContent = "×";
+
+      const prix = document.createElement("span");
+      prix.className = "ligne-prix";
+      if (l.prix_unitaire_ht == null) {
+        prix.textContent = "prix à compléter";
+        prix.classList.add("ligne-warn");
+      } else {
+        prix.textContent = fmtEur(l.prix_unitaire_ht) + " HT";
+      }
+
+      const total = document.createElement("span");
+      total.className = "ligne-total";
+      total.textContent = l.total_ligne_ht == null ? "—" : fmtEur(l.total_ligne_ht) + " HT";
+
+      detail.append(qte, sep, prix, document.createTextNode("="), total);
+      card.appendChild(detail);
+
+      devisLignes.appendChild(card);
+    }
+
+    // Totaux
+    devisTotauxBlock.classList.remove("hidden");
+    devisTotalHt.textContent = fmtEur(devis.total_devis_ht || 0) + " HT";
+    if (devis.total_complet === false) {
+      devisTotalWarn.classList.remove("hidden");
+      devisTotalWarn.textContent = "⚠️ Total partiel — certaines lignes ont un prix à compléter.";
+    } else {
+      devisTotalWarn.classList.add("hidden");
     }
   };
 
@@ -438,6 +623,12 @@
         messagePanel.classList.remove("hidden");
       }
 
+      // Usage / coût
+      if (data.usage) {
+        updateLastUsage(data.usage);
+        updateSessionUsage(data.usage);
+      }
+
       // Debug
       debugJson.textContent = JSON.stringify(data, null, 2);
       debugBlock.classList.remove("hidden");
@@ -457,4 +648,5 @@
   });
 
   setState("idle");
+  refreshClientsList();
 })();

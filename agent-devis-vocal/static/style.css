@@ -28,6 +28,94 @@ body {
 main {
   max-width: 960px;
   margin: 0 auto;
+  min-width: 0;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr;
+  gap: 2rem;
+  max-width: 1320px;
+  margin: 0 auto;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .layout {
+    grid-template-columns: 1fr;
+    gap: 1.5rem;
+  }
+}
+
+/* ---------------- sidebar clients ---------------- */
+
+.sidebar {
+  position: sticky;
+  top: 1rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 1.25rem 1.25rem 1rem;
+  box-shadow: var(--shadow);
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+@media (max-width: 900px) {
+  .sidebar {
+    position: static;
+    max-height: 320px;
+  }
+}
+
+.sidebar-title {
+  margin: 0 0 0.85rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.clients-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.clients-list li {
+  padding: 0.5rem 0.65rem;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  border: 1px solid transparent;
+  transition: background 0.12s ease, border-color 0.12s ease;
+}
+
+.clients-list li.client-item:hover {
+  background: rgba(59, 130, 246, 0.06);
+  border-color: var(--border);
+}
+
+.client-item-name {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.client-item-city {
+  display: block;
+  color: var(--muted);
+  font-size: 0.8rem;
+  margin-top: 0.1rem;
+}
+
+.clients-empty {
+  color: var(--muted);
+  font-style: italic;
+  font-size: 0.85rem;
 }
 
 .results-row {
@@ -65,11 +153,158 @@ header h1 {
   font-size: 0.95rem;
 }
 
+/* ---------------- bandeau usage / coût ---------------- */
+
+.usage-bar {
+  margin-top: 1.25rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.7rem 1rem;
+  text-align: left;
+  font-size: 0.85rem;
+  box-shadow: var(--shadow);
+}
+
+.usage-session {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.usage-label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.usage-line {
+  color: var(--text);
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-line strong {
+  color: var(--accent-strong);
+  font-weight: 600;
+}
+
+.usage-sub {
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.usage-last {
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px dashed var(--border);
+}
+
+.usage-last summary {
+  cursor: pointer;
+  font-size: 0.8rem;
+  color: var(--muted);
+  list-style: none;
+  padding: 0.15rem 0;
+}
+.usage-last summary::-webkit-details-marker { display: none; }
+.usage-last summary::before {
+  content: "▸";
+  display: inline-block;
+  margin-right: 0.4rem;
+  transition: transform 0.15s ease;
+  color: var(--muted);
+}
+.usage-last[open] summary::before {
+  transform: rotate(90deg);
+}
+.usage-last summary strong {
+  color: var(--accent-strong);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-detail {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.usage-detail li {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.usage-detail-label {
+  color: var(--muted);
+}
+
+.usage-detail-model {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+
+.usage-detail-value {
+  color: var(--text);
+  text-align: right;
+}
+
 /* ---------------- bouton micro ---------------- */
 
 .record {
   text-align: center;
   margin-bottom: 2rem;
+}
+
+.examples {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.85rem 1.1rem 0.95rem;
+  margin: 0 auto 1.5rem;
+  max-width: 640px;
+  text-align: left;
+  box-shadow: var(--shadow);
+}
+
+.examples-title {
+  margin: 0 0 0.55rem;
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.examples-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.examples-list li {
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--text);
+  padding-left: 0.85rem;
+  border-left: 2px solid var(--border);
+}
+
+.examples-hint {
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-style: italic;
 }
 
 .mic-btn {
@@ -232,6 +467,121 @@ header h1 {
 .fourniture-line {
   font-size: 0.9rem;
   color: var(--muted);
+}
+
+/* ---------------- lignes typées du devis ---------------- */
+
+.ligne-card {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--border);
+  border-radius: 10px;
+  padding: 0.65rem 0.85rem;
+  margin-bottom: 0.5rem;
+}
+.ligne-card:last-child { margin-bottom: 0; }
+
+.ligne-type-fourniture { border-left-color: var(--accent); }
+.ligne-type-pose { border-left-color: #8b5cf6; }
+.ligne-type-frais_annexe { border-left-color: #f59e0b; }
+
+.ligne-incomplete {
+  background: rgba(239, 68, 68, 0.04);
+  border-color: rgba(239, 68, 68, 0.25);
+}
+
+.ligne-head {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.35rem;
+}
+
+.ligne-badge {
+  display: inline-block;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.badge-fourniture { background: rgba(59, 130, 246, 0.12); color: #1d4ed8; }
+.badge-pose { background: rgba(139, 92, 246, 0.14); color: #6d28d9; }
+.badge-frais_annexe { background: rgba(245, 158, 11, 0.16); color: #b45309; }
+
+.ligne-desc {
+  font-weight: 600;
+  text-transform: capitalize;
+}
+
+.ligne-marque {
+  font-size: 0.8rem;
+  color: var(--muted);
+  font-style: italic;
+}
+
+.ligne-detail {
+  display: flex;
+  align-items: baseline;
+  gap: 0.45rem;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  flex-wrap: wrap;
+}
+
+.ligne-sep {
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+.ligne-prix {
+  color: var(--text);
+}
+
+.ligne-warn {
+  color: var(--danger);
+  font-weight: 500;
+  font-style: italic;
+}
+
+.ligne-total {
+  margin-left: auto;
+  color: var(--text);
+  font-weight: 600;
+}
+
+/* ---------------- totaux du devis ---------------- */
+
+.devis-totaux {
+  margin-top: 1rem;
+  padding-top: 0.85rem;
+  border-top: 2px solid var(--border);
+}
+
+.totaux-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  font-size: 1rem;
+}
+
+.totaux-row strong {
+  font-size: 1.25rem;
+  color: var(--accent-strong);
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+}
+
+.totaux-warn {
+  margin: 0.5rem 0 0;
+  padding: 0.5rem 0.75rem;
+  background: rgba(245, 158, 11, 0.1);
+  color: #92400e;
+  border-radius: 8px;
+  font-size: 0.82rem;
 }
 
 /* ---------------- fiche client DB ---------------- */
