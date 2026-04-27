@@ -114,7 +114,7 @@
 
   const refreshClientsList = async () => {
     try {
-      const resp = await fetch("/clients");
+      const resp = await fetch("clients");
       if (!resp.ok) throw new Error(resp.statusText);
       const data = await resp.json();
       renderClientsList(data);
@@ -369,7 +369,7 @@
       submit.disabled = true;
       submit.textContent = "Enregistrement…";
       try {
-        const resp = await fetch("/clients", {
+        const resp = await fetch("clients", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(payload),
@@ -597,7 +597,7 @@
       const fd = new FormData();
       fd.append("audio", blob, "dictee.webm");
 
-      const resp = await fetch("/dicter-devis", { method: "POST", body: fd });
+      const resp = await fetch("dicter-devis", { method: "POST", body: fd });
       const data = await resp.json();
 
       if (!resp.ok) {
